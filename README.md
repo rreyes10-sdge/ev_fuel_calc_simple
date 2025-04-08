@@ -1,9 +1,13 @@
-# ev_fuel_calc_simple
-Used for test scenarios for given month
+# EV Fuel Savings Simple Calculator
+Used for test scenarios for a given month in a given year
 
-Utilize the input.csv to create additional scenarios to check calculations against.
+Utilize the **input.csv** to create additional scenarios _(new rows or overwrite existing rows in provided csv)_ to check your calculations against.
 
-output.csv will contain new columns per row that contain the following information that the ev_calc_simple.py calculates:
+Column Q = month  
+Column R = month
+
+The **output.csv** will contain new columns per row that contain the following information that the ev_calc_simple.py calculates:
+```
 return {
         "total_vehicles": total_num_vehicles,
         "total daily miles driven": total_daily_miles_driven,
@@ -31,3 +35,4 @@ return {
             "available_transformer_capacity_flag": available_transformer_capacity_check
         }
     }
+```
