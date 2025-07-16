@@ -118,6 +118,29 @@ def calculate_tou_hours_with_cutoff(tdven, charger_kw, tou_hours, allowed_period
 
     return total_hours
 
+# def get_total_tou_hours_for_period(data, year, month, tou_data, scenario, tdven, charger_kw):
+#     season = determine_season(year, month, TOU_DATA["Seasons"])
+#     all_days_in_month = generate_days_in_month(year, month)
+#     active_days = [
+#         day for day in all_days_in_month
+#         if str(data['charging_behavior_days'].get(day, 'false')).lower() in ['true', '1']
+#     ]
+
+#     total_tou_hours = {"On-Peak": 0, "Off-Peak": 0, "Super Off-Peak": 0}
+    
+#     for day in active_days:
+#         if scenario == "scenario_2" or scenario == "scenario_4":
+#             allowed_periods = ["Off-Peak", "Super Off-Peak"]
+#         else:
+#             allowed_periods = ["On-Peak", "Off-Peak", "Super Off-Peak"]
+
+#         daily_tou_hours = get_total_tou_hours_for_day(data, day, season, tou_data, tdven, charger_kw, allowed_periods)
+#         total_tou_hours["On-Peak"] += daily_tou_hours["On-Peak"]
+#         total_tou_hours["Off-Peak"] += daily_tou_hours["Off-Peak"]
+#         total_tou_hours["Super Off-Peak"] += daily_tou_hours["Super Off-Peak"]
+    
+#     return total_tou_hours
+
 def get_total_tou_hours_for_period(data, year, month, tou_data, scenario, tdven, charger_kw):
     season = determine_season(year, month, TOU_DATA["Seasons"])
     all_days_in_month = generate_days_in_month(year, month)
@@ -125,20 +148,30 @@ def get_total_tou_hours_for_period(data, year, month, tou_data, scenario, tdven,
         day for day in all_days_in_month
         if str(data['charging_behavior_days'].get(day, 'false')).lower() in ['true', '1']
     ]
-
+ 
     total_tou_hours = {"On-Peak": 0, "Off-Peak": 0, "Super Off-Peak": 0}
-    
+ 
+    if scenario == "scenario_2" or scenario == "scenario_4":
+        allowed_periods = ["Off-Peak", "Super Off-Peak"]
+    else:
+        allowed_periods = ["On-Peak", "Off-Peak", "Super Off-Peak"]
+ 
     for day in active_days:
-        if scenario == "scenario_2" or scenario == "scenario_4":
-            allowed_periods = ["Off-Peak", "Super Off-Peak"]
-        else:
-            allowed_periods = ["On-Peak", "Off-Peak", "Super Off-Peak"]
-
-        daily_tou_hours = get_total_tou_hours_for_day(data, day, season, tou_data, tdven, charger_kw, allowed_periods)
-        total_tou_hours["On-Peak"] += daily_tou_hours["On-Peak"]
-        total_tou_hours["Off-Peak"] += daily_tou_hours["Off-Peak"]
-        total_tou_hours["Super Off-Peak"] += daily_tou_hours["Super Off-Peak"]
-    
+        day_type = get_day_type(day)
+        daily_hours = get_tou_hours(
+            start_time_str=data["charging_behavior_startTime"],
+            end_time_str=data["charging_behavior_endTime"],
+            season=season,
+            day_type=day_type,
+            tou_data=tou_data,
+            tdven=tdven,
+            charger_kw=charger_kw,
+            allowed_periods=allowed_periods
+        )
+ 
+        for period in total_tou_hours:
+            total_tou_hours[period] += daily_hours[period]
+ 
     return total_tou_hours
 
 def service_fee(power_requirement, year):
@@ -307,9 +340,14 @@ def process_row(data):
     # print(total_charger_capacity)
 
     # Calculate TOU hours for the first active day
+    first_day_tou_hours = {"On-Peak": 0, "Off-Peak": 0, "Super Off-Peak": 0}
     first_active_day = active_days[0] if active_days else None
+
     if first_active_day:
         first_day_tou_hours = get_total_tou_hours_for_day(data, first_active_day, season, TOU_DATA, tdven, charger_kw, ["On-Peak", "Off-Peak", "Super Off-Peak"])
+    else:
+        print(f"⚠️ Warning: No active charging days specified for {month}/{year} — skipping power requirement calculations may lead to divide by zero.")
+ 
 
     # Calculate total TOU hours for the entire month given each scenario
     total_tou_hours_scenario_1 = get_total_tou_hours_for_period(data, year, month, TOU_DATA, "scenario_1", tdven, charger_kw)
@@ -318,9 +356,12 @@ def process_row(data):
     total_tou_hours_scenario_4 = get_total_tou_hours_for_period(data, year, month, TOU_DATA, "scenario_4", tdven, total_charger_capacity)
 
     # first day tou hours since we power requirement is measured hourly and the total tou hours sums total hours for full month. tdven is daily energy, thus we only calculate using tou hours for one day, in this case the first active day user specified
+    def safe_divide(numerator, denominator, fallback=0):
+        return numerator / denominator if denominator else fallback
+ 
     power_requirements = {
-        "scenario_1": tdven / (first_day_tou_hours["On-Peak"] + first_day_tou_hours["Off-Peak"] + first_day_tou_hours["Super Off-Peak"]),
-        "scenario_2": tdven / (first_day_tou_hours["Off-Peak"] + first_day_tou_hours["Super Off-Peak"]),
+        "scenario_1": safe_divide(tdven, first_day_tou_hours["On-Peak"] + first_day_tou_hours["Off-Peak"] + first_day_tou_hours["Super Off-Peak"]),
+        "scenario_2": safe_divide(tdven, first_day_tou_hours["Off-Peak"] + first_day_tou_hours["Super Off-Peak"]),
         "scenario_3": total_charger_capacity,
         "scenario_4": total_charger_capacity
     }
