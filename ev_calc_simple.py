@@ -4,6 +4,7 @@ from static_data import fossil_fuel_mpg_mapping, TOU_DATA
 import json
 import calendar
 import math
+import ast
 
  
 INPUT_CSV = 'input.csv'
@@ -67,13 +68,12 @@ def get_tou_hours(start_time_str, end_time_str, season, day_type, tou_data, tdve
             if category not in allowed_periods:
                 continue
             for start, end in time_ranges:
-                start_seg = time_to_datetime(start)
-                end_seg = time_to_datetime(end)
+                start_seg = datetime.combine(current.date(), parse_time_str(start))
+                end_seg = datetime.combine(current.date(), parse_time_str(end))
                 if end_seg <= start_seg:
                     end_seg += timedelta(days=1)
-
-                if start_seg.time() <= current_time < end_seg.time() or \
-                   (start_seg <= current < end_seg):
+                
+                if start_seg <= current < end_seg:
                     total_hours[category] += 1
                     remaining_energy -= charger_kw
                     break
@@ -277,8 +277,9 @@ def process_row(data):
     # Parse the charging_behavior_days field
     if 'charging_behavior_days' in data and data['charging_behavior_days']:
         try:
-            data['charging_behavior_days'] = json.loads(data['charging_behavior_days'])
-        except json.JSONDecodeError:
+            data['charging_behavior_days'] = ast.literal_eval(data['charging_behavior_days'])
+        except (ValueError, SyntaxError):
+            print("⚠️ Could not parse 'charging_behavior_days'")
             data['charging_behavior_days'] = {}
     
     # Example: Count number of "True" days
